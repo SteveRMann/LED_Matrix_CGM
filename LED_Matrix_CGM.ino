@@ -32,7 +32,7 @@ const char* MQTT_TOPIC_BRIGHT = "cgm/bright";
 #define MATRIX_PIN   D4
 #define BRIGHTNESS   5                // 0-255. Startup brightness until cgm/bright arrives
 #define BRIGHT_MIN   5                // cgm/bright 0 -> this
-#define BRIGHT_MAX   200              // cgm/bright 9 -> this
+#define BRIGHT_MAX   50               // cgm/bright 9 -> this
 
 // Color bands for numeric values (mg/dL)
 const int BG_URGENT_LOW = 55;
