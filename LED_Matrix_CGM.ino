@@ -19,6 +19,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_NeoMatrix.h>
 #include <Adafruit_NeoPixel.h>
+#include <ESP8266NetBIOS.h>  //answer NetBIOS (and mDNS)
+#include <ESP8266mDNS.h>
 #include "secrets.h"  // WIFI_SSID, WIFI_PASS, MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS
 
 // ---------- User settings ----------
@@ -48,11 +50,11 @@ struct DeviceName {
   uint32_t chipId;
   const char* name;
 };
+
 const DeviceName DEVICE_NAMES[] = {
-  { 0x000000, "cgm-matrix-1" },  // replace with real chip IDs
-  { 0x000000, "cgm-matrix-2" },
-};
-// -----------------------------------
+  { 0x8B45AC, "cgm-matrix-1" },  // MAC 84:0D:8E:8B:45:AC
+  { 0x0DD020, "cgm-matrix-2" },  // MAC D8:F1:5B:0D:D0:20
+};                               // -----------------------------------
 
 
 
@@ -324,8 +326,9 @@ void setup() {
   Serial.printf("Chip ID: 0x%06X  Name: %s\n", ESP.getChipId(), deviceName);
 
   WiFi.mode(WIFI_STA);
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);   // keep radio awake: low latency, no dropped pings
   WiFi.hostname(deviceName);
-  WiFi.setAutoReconnect(true);
+  WiFi.setAutoReconnect(true);          // rejoin the access point if the connection drops
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
   Serial.print("Connecting to WiFi");
@@ -342,6 +345,9 @@ void setup() {
   Serial.print("MAC Address: ");
   Serial.println(WiFi.macAddress());
 
+  NBNS.begin(deviceName);  // Windows IP scanners, ping by name
+  MDNS.begin(deviceName);  // reachable as cgm-matrix-1.local
+
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
 }
@@ -354,6 +360,7 @@ void loop() {
 
   mqttConnect();
   mqtt.loop();
+  MDNS.update();
 
   // Redraw when stale state or connection state flips
   bool stale = haveValue && millis() - lastMsgMs > STALE_MS;
