@@ -1,0 +1,14 @@
+# Private credentials - use secrets_sample.h as the template
+secrets.h
+ 
+# Arduino / PlatformIO build output
+build/
+.pio/
+*.bin
+*.elf
+ 
+# Editor / OS clutter
+.vscode/
+.DS_Store
+Thumbs.db
+ 
