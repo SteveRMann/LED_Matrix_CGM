@@ -41,7 +41,20 @@ const int BG_URGENT_HIGH = 250;
 
 const unsigned long STALE_MS = 15UL * 60UL * 1000UL;  // grey out after 15 min with no update
 const unsigned long SCROLL_MS = 60;                   // scroll speed for long text
+
+// Friendly names per board (chip ID is printed on Serial at boot).
+// Boards not listed get "LEDMatrix-<chipid>".
+struct DeviceName {
+  uint32_t chipId;
+  const char* name;
+};
+const DeviceName DEVICE_NAMES[] = {
+  { 0x000000, "cgm-matrix-1" },  // replace with real chip IDs
+  { 0x000000, "cgm-matrix-2" },
+};
 // -----------------------------------
+
+
 
 // Most 8x32 flexible panels are column-wired zigzag starting top-left.
 // If text appears scrambled/mirrored, change these flags.
@@ -51,6 +64,7 @@ Adafruit_NeoMatrix matrix(32, 8, MATRIX_PIN,
 
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
+
 
 // ---------- Trend arrows ----------
 // The built-in font has no arrow glyphs, so they are drawn as 7-row bitmaps
@@ -92,6 +106,25 @@ unsigned long lastMsgMs = 0;
 unsigned long lastScrollMs = 0;
 unsigned long lastMqttTryMs = 0;
 
+
+
+// -------------------- setDeviceName() --------------------
+char deviceName[33];
+
+void setDeviceName() {
+  uint32_t id = ESP.getChipId();
+  for (const auto& d : DEVICE_NAMES) {
+    if (d.chipId == id) {
+      strlcpy(deviceName, d.name, sizeof(deviceName));
+      return;
+    }
+  }
+  snprintf(deviceName, sizeof(deviceName), "LEDMatrix-%06X", id);
+}
+
+
+
+// -------------------- colorFor() --------------------
 uint16_t colorFor(const char* s) {
   char* end;
   long v = strtol(s, &end, 10);
@@ -101,6 +134,9 @@ uint16_t colorFor(const char* s) {
   return matrix.Color(0, 255, 0);
 }
 
+
+
+// -------------------- setText() --------------------
 void setText(const char* s, uint16_t color) {
   strncpy(text, s, sizeof(text) - 1);
   text[sizeof(text) - 1] = '\0';
@@ -113,6 +149,8 @@ void setText(const char* s, uint16_t color) {
   needRedraw = true;
 }
 
+
+// -------------------- showReading() --------------------
 // Compose "<bg><trend>" and show it
 void showReading() {
   const TrendStyle& t = TRENDS[(trend >= 0 && trend <= 7) ? trend : 0];
@@ -127,6 +165,8 @@ void showReading() {
   }
 }
 
+
+// -------------------- mqttCallback() --------------------
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   char buf[64];
   unsigned int n = min(length, (unsigned int)(sizeof(buf) - 1));
@@ -177,6 +217,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   showReading();
 }
 
+// -------------------- mqttConnect() --------------------
 void mqttConnect() {
   if (mqtt.connected())
     return;
@@ -200,7 +241,8 @@ void mqttConnect() {
 
   lastMqttTryMs = millis();
 
-  String clientId = "LEDMatrix-" + String(ESP.getChipId(), HEX);
+  //String clientId = "LEDMatrix-" + String(ESP.getChipId(), HEX);
+  String clientId = deviceName;
 
   bool ok = (strlen(MQTT_USER) > 0)
               ? mqtt.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)
@@ -228,6 +270,8 @@ void mqttConnect() {
   }
 }
 
+
+// -------------------- drawDisplay() --------------------
 void drawDisplay() {
   // When stale, show only the value (no trend), greyed out
   bool stale = haveValue && millis() - lastMsgMs > STALE_MS;
@@ -264,18 +308,23 @@ void drawDisplay() {
 }
 
 
-
+// -------------------- setup() --------------------
 void setup() {
   Serial.begin(115200);
   delay(500);
   Serial.println();
+
   matrix.begin();
   matrix.setTextWrap(false);
   matrix.setBrightness(BRIGHTNESS);
   setText("WiFi", matrix.Color(0, 0, 255));
   drawDisplay();
 
+  setDeviceName();
+  Serial.printf("Chip ID: 0x%06X  Name: %s\n", ESP.getChipId(), deviceName);
+
   WiFi.mode(WIFI_STA);
+  WiFi.hostname(deviceName);
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
@@ -298,7 +347,7 @@ void setup() {
 }
 
 
-
+// -------------------- loop() --------------------
 void loop() {
   static bool wasStale = false;
   static bool wasConnected = false;
