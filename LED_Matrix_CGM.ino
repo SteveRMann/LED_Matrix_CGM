@@ -19,81 +19,85 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_NeoMatrix.h>
 #include <Adafruit_NeoPixel.h>
-#include "secrets.h"   // WIFI_SSID, WIFI_PASS, MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS
+#include "secrets.h"  // WIFI_SSID, WIFI_PASS, MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS
 
 // ---------- User settings ----------
 const char* MQTT_TOPIC_BG = "cgm/bg";
 const char* MQTT_TOPIC_TREND = "cgm/trend";
 const char* MQTT_TOPIC_BRIGHT = "cgm/bright";
 
-#define MATRIX_PIN   D4
-#define BRIGHTNESS   5                // 0-255. Startup brightness until cgm/bright arrives
-#define BRIGHT_MIN   5                // cgm/bright 0 -> this
-#define BRIGHT_MAX   50               // cgm/bright 9 -> this
+#define MATRIX_PIN D4
+#define BRIGHTNESS 1  // 0-255. Startup brightness until cgm/bright arrives
+#define BRIGHT_MIN 1  // cgm/bright 0 -> this
+#define BRIGHT_MAX 4  // cgm/bright 9 -> this
 
 // Color bands for numeric values (mg/dL)
 const int BG_URGENT_LOW = 55;
-const int BG_LOW        = 70;
-const int BG_HIGH       = 180;
-const int BG_URGENT_HIGH= 250;
+const int BG_LOW = 70;
+const int BG_HIGH = 180;
+const int BG_URGENT_HIGH = 250;
 
-#define TREND_GREY   120               // grey level (0-255) for the trend symbol
+#define TREND_GREY 120  // grey level (0-255) for the trend symbol
 
-const unsigned long STALE_MS  = 15UL * 60UL * 1000UL;  // grey out after 15 min with no update
-const unsigned long SCROLL_MS = 60;                    // scroll speed for long text
+const unsigned long STALE_MS = 15UL * 60UL * 1000UL;  // grey out after 15 min with no update
+const unsigned long SCROLL_MS = 60;                   // scroll speed for long text
 // -----------------------------------
 
 // Most 8x32 flexible panels are column-wired zigzag starting top-left.
 // If text appears scrambled/mirrored, change these flags.
 Adafruit_NeoMatrix matrix(32, 8, MATRIX_PIN,
-  NEO_MATRIX_TOP + NEO_MATRIX_LEFT + NEO_MATRIX_COLUMNS + NEO_MATRIX_ZIGZAG,
-  NEO_GRB + NEO_KHZ800);
+                          NEO_MATRIX_TOP + NEO_MATRIX_LEFT + NEO_MATRIX_COLUMNS + NEO_MATRIX_ZIGZAG,
+                          NEO_GRB + NEO_KHZ800);
 
-WiFiClient   wifiClient;
+WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
 
 // ---------- Trend arrows ----------
 // The built-in font has no arrow glyphs, so they are drawn as 7-row bitmaps
 // (one byte per row, leftmost pixel = MSB).
-const uint8_t ARROW_UP[]    PROGMEM = {0x20,0x70,0xA8,0x20,0x20,0x20,0x20}; // ↑ 5 wide
-const uint8_t ARROW_DOWN[]  PROGMEM = {0x20,0x20,0x20,0x20,0xA8,0x70,0x20}; // ↓ 5 wide
-const uint8_t ARROW_UP2[]   PROGMEM = {0x44,0xEE,0x44,0x44,0x44,0x44,0x44}; // ⇈ 7 wide
-const uint8_t ARROW_DOWN2[] PROGMEM = {0x44,0x44,0x44,0x44,0x44,0xEE,0x44}; // ⇊ 7 wide
+const uint8_t ARROW_UP[] PROGMEM = { 0x20, 0x70, 0xA8, 0x20, 0x20, 0x20, 0x20 };     // ↑ 5 wide
+const uint8_t ARROW_DOWN[] PROGMEM = { 0x20, 0x20, 0x20, 0x20, 0xA8, 0x70, 0x20 };   // ↓ 5 wide
+const uint8_t ARROW_UP2[] PROGMEM = { 0x44, 0xEE, 0x44, 0x44, 0x44, 0x44, 0x44 };    // ⇈ 7 wide
+const uint8_t ARROW_DOWN2[] PROGMEM = { 0x44, 0x44, 0x44, 0x44, 0x44, 0xEE, 0x44 };  // ⇊ 7 wide
 
-struct TrendStyle { const char* suffix; const uint8_t* glyph; uint8_t glyphW; };
+struct TrendStyle {
+  const char* suffix;
+  const uint8_t* glyph;
+  uint8_t glyphW;
+};
 const TrendStyle TRENDS[8] = {
-  {"",    nullptr,     0},   // 0 unknown -> nothing appended
-  {"",    ARROW_UP2,   7},   // 1 rising_quickly   ⇈
-  {"",    ARROW_UP,    5},   // 2 rising           ↑
-  {"/",   nullptr,     0},   // 3 rising_slightly
-  {"-",   nullptr,     0},   // 4 steady
-  {"\\",  nullptr,     0},   // 5 falling_slightly
-  {"",    ARROW_DOWN,  5},   // 6 falling          ↓
-  {"",    ARROW_DOWN2, 7},   // 7 falling_quickly  ⇊
+  { "", nullptr, 0 },      // 0 unknown -> nothing appended
+  { "", ARROW_UP2, 7 },    // 1 rising_quickly   ⇈
+  { "", ARROW_UP, 5 },     // 2 rising           ↑
+  { "/", nullptr, 0 },     // 3 rising_slightly
+  { "-", nullptr, 0 },     // 4 steady
+  { "\\", nullptr, 0 },    // 5 falling_slightly
+  { "", ARROW_DOWN, 5 },   // 6 falling          ↓
+  { "", ARROW_DOWN2, 7 },  // 7 falling_quickly  ⇊
 };
 // -----------------------------------
 
-char     text[64]    = "WiFi";
-char     bgValue[32] = "";
-int      trend       = 0;
-const uint8_t* glyph = nullptr;     // arrow drawn after text (nullptr = none)
-uint8_t  glyphW      = 0;
-uint8_t  valueLen    = 0;           // chars of text drawn in value color; rest is trend (grey)
+char text[64] = "WiFi";
+char bgValue[32] = "";
+int trend = 0;
+const uint8_t* glyph = nullptr;  // arrow drawn after text (nullptr = none)
+uint8_t glyphW = 0;
+uint8_t valueLen = 0;  // chars of text drawn in value color; rest is trend (grey)
 uint16_t textColor;
-int      textWidth   = 0;
-int      scrollX     = 32;
-bool     haveValue   = false;
-bool     needRedraw  = true;
-unsigned long lastMsgMs     = 0;
-unsigned long lastScrollMs  = 0;
+int textWidth = 0;
+int scrollX = 32;
+bool haveValue = false;
+bool needRedraw = true;
+unsigned long lastMsgMs = 0;
+unsigned long lastScrollMs = 0;
 unsigned long lastMqttTryMs = 0;
 
 uint16_t colorFor(const char* s) {
   char* end;
   long v = strtol(s, &end, 10);
-  if (end == s) return matrix.Color(255, 255, 255);        // not a number -> white
+  if (end == s) return matrix.Color(255, 255, 255);  // not a number -> white
   if (v <= BG_URGENT_LOW || v >= BG_URGENT_HIGH) return matrix.Color(255, 0, 0);
-  if (v < BG_LOW || v > BG_HIGH)                 return matrix.Color(255, 160, 0);
+  if (v < BG_LOW || v > BG_HIGH) return matrix.Color(255, 160, 0);
   return matrix.Color(0, 255, 0);
 }
 
@@ -101,11 +105,11 @@ void setText(const char* s, uint16_t color) {
   strncpy(text, s, sizeof(text) - 1);
   text[sizeof(text) - 1] = '\0';
   textColor = color;
-  textWidth = strlen(text) * 6 - 1;   // default 5x7 font = 6 px per char incl. gap
-  valueLen  = strlen(text);
-  glyph  = nullptr;
+  textWidth = strlen(text) * 6 - 1;  // default 5x7 font = 6 px per char incl. gap
+  valueLen = strlen(text);
+  glyph = nullptr;
   glyphW = 0;
-  scrollX   = 32;
+  scrollX = 32;
   needRedraw = true;
 }
 
@@ -117,9 +121,9 @@ void showReading() {
   setText(buf, colorFor(bgValue));
   valueLen = min(strlen(bgValue), strlen(text));
   if (t.glyph) {
-    glyph  = t.glyph;
+    glyph = t.glyph;
     glyphW = t.glyphW;
-    textWidth = strlen(text) * 6 + glyphW;   // text (incl. 1px char gap) + arrow
+    textWidth = strlen(text) * 6 + glyphW;  // text (incl. 1px char gap) + arrow
   }
 }
 
@@ -174,31 +178,61 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 void mqttConnect() {
-  if (mqtt.connected() || WiFi.status() != WL_CONNECTED) return;
-  if (millis() - lastMqttTryMs < 5000) return;
+  if (mqtt.connected())
+    return;
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.printf(
+      "MQTT skipped, WiFi=%d RSSI=%d\n",
+      WiFi.status(),
+      WiFi.RSSI());
+    return;
+  }
+
+  if (millis() - lastMqttTryMs < 5000)
+    return;
+
+  Serial.printf(
+    "WiFi=%d RSSI=%d IP=%s\n",
+    WiFi.status(),
+    WiFi.RSSI(),
+    WiFi.localIP().toString().c_str());
+
   lastMqttTryMs = millis();
 
   String clientId = "LEDMatrix-" + String(ESP.getChipId(), HEX);
+
   bool ok = (strlen(MQTT_USER) > 0)
               ? mqtt.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)
               : mqtt.connect(clientId.c_str());
+
   if (ok) {
     Serial.println("MQTT connected");
+
     mqtt.subscribe(MQTT_TOPIC_BG);
     mqtt.subscribe(MQTT_TOPIC_TREND);
     mqtt.subscribe(MQTT_TOPIC_BRIGHT);
-    if (!haveValue) setText("---", matrix.Color(80, 80, 80));
+
+    if (!haveValue)
+      setText("---", matrix.Color(80, 80, 80));
   } else {
-    Serial.printf("MQTT failed, rc=%d\n", mqtt.state());
-    if (!haveValue) setText("MQTT", matrix.Color(255, 0, 0));
+    Serial.printf(
+      "MQTT failed, rc=%d WiFi=%d RSSI=%d Heap=%u\n",
+      mqtt.state(),
+      WiFi.status(),
+      WiFi.RSSI(),
+      ESP.getFreeHeap());
+
+    if (!haveValue)
+      setText("MQTT", matrix.Color(255, 0, 0));
   }
 }
 
 void drawDisplay() {
   // When stale, show only the value (no trend), greyed out
-  bool stale    = haveValue && millis() - lastMsgMs > STALE_MS;
-  uint8_t len   = stale ? valueLen : strlen(text);
-  int width     = stale ? valueLen * 6 - 1 : textWidth;
+  bool stale = haveValue && millis() - lastMsgMs > STALE_MS;
+  uint8_t len = stale ? valueLen : strlen(text);
+  int width = stale ? valueLen * 6 - 1 : textWidth;
   bool showGlyph = glyph && !stale;
 
   bool scrolling = width > 32;
@@ -207,8 +241,8 @@ void drawDisplay() {
   lastScrollMs = millis();
   needRedraw = false;
 
-  uint16_t c  = stale ? matrix.Color(60, 60, 60) : textColor;
-  uint16_t tc = matrix.Color(TREND_GREY, TREND_GREY, TREND_GREY);   // trend is always grey
+  uint16_t c = stale ? matrix.Color(60, 60, 60) : textColor;
+  uint16_t tc = matrix.Color(TREND_GREY, TREND_GREY, TREND_GREY);  // trend is always grey
 
   matrix.fillScreen(0);
   if (scrolling) {
@@ -229,9 +263,12 @@ void drawDisplay() {
   matrix.show();
 }
 
+
+
 void setup() {
   Serial.begin(115200);
-
+  delay(500);
+  Serial.println();
   matrix.begin();
   matrix.setTextWrap(false);
   matrix.setBrightness(BRIGHTNESS);
@@ -242,9 +279,25 @@ void setup() {
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(WiFi.status());
+  }
+
+  Serial.println();
+  Serial.println("WiFi connected");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  Serial.print("MAC Address: ");
+  Serial.println(WiFi.macAddress());
+
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
 }
+
+
 
 void loop() {
   static bool wasStale = false;
