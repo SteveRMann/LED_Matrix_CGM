@@ -9,6 +9,9 @@
   Libraries (Library Manager):
     - PubSubClient (Nick O'Leary)
     - Adafruit NeoMatrix  (pulls in Adafruit GFX + Adafruit NeoPixel)
+
+  WiFi / MQTT credentials live in secrets.h (not in git).
+  Copy secrets_sample.h to secrets.h and fill in your values.
 */
 
 #include <ESP8266WiFi.h>
@@ -16,15 +19,9 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_NeoMatrix.h>
 #include <Adafruit_NeoPixel.h>
+#include "secrets.h"   // WIFI_SSID, WIFI_PASS, MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS
 
 // ---------- User settings ----------
-const char* WIFI_SSID   = "Kaywinnet";
-const char* WIFI_PASS   = "806194edb8";
-
-const char* MQTT_HOST   = "192.168.1.57";
-const uint16_t MQTT_PORT = 1883;
-const char* MQTT_USER   = "steve";          // leave "" if broker has no auth
-const char* MQTT_PASS   = "nudist";
 const char* MQTT_TOPIC_BG = "cgm/bg";
 const char* MQTT_TOPIC_TREND = "cgm/trend";
 const char* MQTT_TOPIC_BRIGHT = "cgm/bright";
