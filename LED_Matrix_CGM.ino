@@ -39,7 +39,7 @@ const int BG_LOW = 70;
 const int BG_HIGH = 180;
 const int BG_URGENT_HIGH = 250;
 
-#define TREND_GREY 120  // grey level (0-255) for the trend symbol
+#define TREND_GREY 200  // >=200 survives gamma + brightness 1
 
 const unsigned long STALE_MS = 15UL * 60UL * 1000UL;  // grey out after 15 min with no update
 const unsigned long SCROLL_MS = 60;                   // scroll speed for long text
@@ -71,10 +71,13 @@ PubSubClient mqtt(wifiClient);
 // ---------- Trend arrows ----------
 // The built-in font has no arrow glyphs, so they are drawn as 7-row bitmaps
 // (one byte per row, leftmost pixel = MSB).
-const uint8_t ARROW_UP[] PROGMEM = { 0x20, 0x70, 0xA8, 0x20, 0x20, 0x20, 0x20 };     // ↑ 5 wide
-const uint8_t ARROW_DOWN[] PROGMEM = { 0x20, 0x20, 0x20, 0x20, 0xA8, 0x70, 0x20 };   // ↓ 5 wide
-const uint8_t ARROW_UP2[] PROGMEM = { 0x44, 0xEE, 0x44, 0x44, 0x44, 0x44, 0x44 };    // ⇈ 7 wide
-const uint8_t ARROW_DOWN2[] PROGMEM = { 0x44, 0x44, 0x44, 0x44, 0x44, 0xEE, 0x44 };  // ⇊ 7 wide
+const uint8_t ARROW_UP[] PROGMEM = { 0x20, 0x70, 0xA8, 0x20, 0x20, 0x20, 0x20 };    // ↑ 5 wide
+const uint8_t ARROW_DOWN[] PROGMEM = { 0x20, 0x20, 0x20, 0x20, 0xA8, 0x70, 0x20 };  // ↓ 5 wide
+//const uint8_t ARROW_UP2[] PROGMEM = { 0x44, 0xEE, 0x44, 0x44, 0x44, 0x44, 0x44 };    // ⇈ 7 wide
+//const uint8_t ARROW_DOWN2[] PROGMEM = { 0x44, 0x44, 0x44, 0x44, 0x44, 0xEE, 0x44 };  // ⇊ 7 wide
+const uint8_t ARROW_UP2[] PROGMEM = { 0x30, 0x78, 0xFC, 0x30, 0x30, 0x30, 0x30 };
+const uint8_t ARROW_DOWN2[] PROGMEM = { 0x30, 0x30, 0x30, 0x30, 0xFC, 0x78, 0x30 };
+
 
 struct TrendStyle {
   const char* suffix;
@@ -132,7 +135,7 @@ uint16_t colorFor(const char* s) {
   long v = strtol(s, &end, 10);
   if (end == s) return matrix.Color(255, 255, 255);  // not a number -> white
   if (v <= BG_URGENT_LOW || v >= BG_URGENT_HIGH) return matrix.Color(255, 0, 0);
-  if (v < BG_LOW || v > BG_HIGH) return matrix.Color(255, 160, 0);
+  if (v < BG_LOW || v > BG_HIGH) return matrix.Color(255, 200, 0);
   return matrix.Color(0, 255, 0);
 }
 
@@ -258,7 +261,7 @@ void mqttConnect() {
     mqtt.subscribe(MQTT_TOPIC_BRIGHT);
 
     if (!haveValue)
-      setText("---", matrix.Color(80, 80, 80));
+      setText("---", matrix.Color(200, 200, 200));
   } else {
     Serial.printf(
       "MQTT failed, rc=%d WiFi=%d RSSI=%d Heap=%u\n",
@@ -287,7 +290,7 @@ void drawDisplay() {
   lastScrollMs = millis();
   needRedraw = false;
 
-  uint16_t c = stale ? matrix.Color(60, 60, 60) : textColor;
+  uint16_t c = stale ? matrix.Color(200, 200, 200) : textColor;
   uint16_t tc = matrix.Color(TREND_GREY, TREND_GREY, TREND_GREY);  // trend is always grey
 
   matrix.fillScreen(0);
@@ -326,9 +329,9 @@ void setup() {
   Serial.printf("Chip ID: 0x%06X  Name: %s\n", ESP.getChipId(), deviceName);
 
   WiFi.mode(WIFI_STA);
-  WiFi.setSleepMode(WIFI_NONE_SLEEP);   // keep radio awake: low latency, no dropped pings
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);  // keep radio awake: low latency, no dropped pings
   WiFi.hostname(deviceName);
-  WiFi.setAutoReconnect(true);          // rejoin the access point if the connection drops
+  WiFi.setAutoReconnect(true);  // rejoin the access point if the connection drops
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
   Serial.print("Connecting to WiFi");
