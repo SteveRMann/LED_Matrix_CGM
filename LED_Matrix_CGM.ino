@@ -43,6 +43,7 @@ const int BG_URGENT_HIGH = 250;
 
 const unsigned long STALE_MS = 15UL * 60UL * 1000UL;  // grey out after 15 min with no update
 const unsigned long SCROLL_MS = 60;                   // scroll speed for long text
+const unsigned long REBOOT_MS = 2UL * 60UL * 1000UL;  // reboot if no cgm/bg for this long (0 = never)
 
 // Friendly names per board (chip ID is printed on Serial at boot).
 // Boards not listed get "LEDMatrix-<chipid>".
@@ -327,6 +328,7 @@ void setup() {
 
   setDeviceName();
   Serial.printf("Chip ID: 0x%06X  Name: %s\n", ESP.getChipId(), deviceName);
+  Serial.printf("Reset reason: %s\n", ESP.getResetReason().c_str());
 
   WiFi.mode(WIFI_STA);
   WiFi.setSleepMode(WIFI_NONE_SLEEP);  // keep radio awake: low latency, no dropped pings
@@ -353,6 +355,9 @@ void setup() {
 
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
+
+  mqtt.setKeepAlive(60);
+  mqtt.setSocketTimeout(30);
 }
 
 
@@ -364,6 +369,15 @@ void loop() {
   mqttConnect();
   mqtt.loop();
   MDNS.update();
+
+  // Watchdog: no cgm/bg data for REBOOT_MS -> reboot
+  // (lastMsgMs starts at 0, so this also covers "never received anything since boot")
+  if (REBOOT_MS > 0 && millis() - lastMsgMs > REBOOT_MS) {
+    Serial.printf("No MQTT data for %lu s (WiFi=%d RSSI=%d MQTT=%d) -> rebooting\n",
+                  REBOOT_MS / 1000, WiFi.status(), WiFi.RSSI(), mqtt.state());
+    delay(100);  // let Serial flush
+    ESP.restart();
+  }
 
   // Redraw when stale state or connection state flips
   bool stale = haveValue && millis() - lastMsgMs > STALE_MS;
