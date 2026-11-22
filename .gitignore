@@ -1,14 +1,20 @@
-# Private credentials - use secrets_sample.h as the template
-secrets.h
- 
-# Arduino / PlatformIO build output
+# Private WiFi credentials and API keys - do not publish
+**/secrets.h
+
+# Arduino build output (Arduino IDE 2 "Export compiled binary" / arduino-cli)
 build/
-.pio/
+**/build/
+
+# Compiled binaries anywhere in the repo
 *.bin
 *.elf
- 
-# Editor / OS clutter
-.vscode/
+*.hex
+*.map
+.pio/
+
+# OS / editor clutter
 .DS_Store
 Thumbs.db
- 
+desktop.ini
+.vscode/
+*.log
